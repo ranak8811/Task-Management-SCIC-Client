@@ -112,7 +112,7 @@ const TaskBoard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fdfd] p-4">
+    <div className="min-h-[calc(100vh-68px)] bg-[#f8fdfd] p-4">
       <Toaster />
       <header className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-[#040d0d]">Task Management</h1>
