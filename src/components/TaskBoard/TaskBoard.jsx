@@ -55,51 +55,83 @@ const TaskBoard = () => {
     const { active, over } = event;
     if (!over) return;
 
-    let sourceColumn, targetColumn;
+    const activeId = active.id;
+    const overId = over?.id || null; // Handle empty target column
+
+    let sourceColumn = null;
+    let targetColumn = null;
+
+    // Identify source & target columns
     for (const key in columns) {
-      if (columns[key].find((item) => item._id === active.id)) {
+      if (columns[key].some((task) => task._id === activeId)) {
         sourceColumn = key;
       }
-      if (columns[key].find((item) => item._id === over.id)) {
+      if (overId && columns[key].some((task) => task._id === overId)) {
         targetColumn = key;
       }
     }
-    if (sourceColumn && targetColumn) {
-      if (sourceColumn === targetColumn) {
-        const items = columns[sourceColumn];
-        const oldIndex = items.findIndex((item) => item._id === active.id);
-        const newIndex = items.findIndex((item) => item._id === over.id);
-        const newItems = arrayMove(items, oldIndex, newIndex);
-        newItems.forEach((task, index) => {
-          task.order = index;
-          axios.patch(`${API_URL}/task/${task._id}`, { order: task.order });
-        });
-        setColumns({ ...columns, [sourceColumn]: newItems });
-        toast.success("Task reordered");
-      } else {
-        // Moving task between columns
-        const sourceItems = columns[sourceColumn];
-        const targetItems = columns[targetColumn];
-        const task = sourceItems.find((item) => item._id === active.id);
-        if (!task) return;
-        const newSourceItems = sourceItems.filter(
-          (item) => item._id !== active.id
-        );
-        task.category = targetColumn;
-        task.order = targetItems.length;
-        const newTargetItems = [...targetItems, task];
-        axios.patch(`${API_URL}/task/${task._id}`, {
+
+    if (!sourceColumn) return;
+
+    // Handle empty column drops
+    if (!targetColumn) {
+      targetColumn = Object.keys(columns).find(
+        (col) => col === over?.data?.current?.sortable?.containerId
+      );
+    }
+    if (!targetColumn) return;
+
+    if (sourceColumn === targetColumn) {
+      // **Reordering within the same column**
+      const items = [...columns[sourceColumn]];
+      const oldIndex = items.findIndex((task) => task._id === activeId);
+      const newIndex = overId
+        ? items.findIndex((task) => task._id === overId)
+        : items.length - 1;
+
+      if (oldIndex === newIndex) return; // No change, exit early
+
+      const newItems = arrayMove(items, oldIndex, newIndex);
+
+      newItems.forEach((task, index) => {
+        task.order = index;
+        axios.patch(`${API_URL}/task/${task._id}`, { order: task.order });
+      });
+
+      setColumns((prev) => ({ ...prev, [sourceColumn]: newItems }));
+      toast.success("Task reordered");
+    } else {
+      // **Moving task between columns**
+      const sourceItems = [...columns[sourceColumn]];
+      const targetItems = [...columns[targetColumn]];
+
+      const taskIndex = sourceItems.findIndex((task) => task._id === activeId);
+      if (taskIndex === -1) return;
+
+      const [movedTask] = sourceItems.splice(taskIndex, 1);
+      movedTask.category = targetColumn;
+      movedTask.order = targetItems.length;
+
+      targetItems.push(movedTask);
+
+      setColumns((prev) => ({
+        ...prev,
+        [sourceColumn]: sourceItems,
+        [targetColumn]: targetItems,
+      }));
+
+      axios
+        .patch(`${API_URL}/task/${movedTask._id}`, {
           category: targetColumn,
-          order: task.order,
+          order: movedTask.order,
           activity: `Task moved to ${targetColumn}`,
+        })
+        .then(() => {
+          toast.success(`Task moved to ${targetColumn}`);
+        })
+        .catch(() => {
+          toast.error("Failed to move task");
         });
-        setColumns({
-          ...columns,
-          [sourceColumn]: newSourceItems,
-          [targetColumn]: newTargetItems,
-        });
-        toast.success("Task moved");
-      }
     }
   };
 
